@@ -2,13 +2,10 @@ version: '2'
 
 networks:
   webnet:
-  redisnet:
   db_network:
 
 volumes:
   postgres_data:
-  dbbackups:
-  redisdata:
 
 services:
   backend:
@@ -23,41 +20,14 @@ services:
       - database
     networks:
       - webnet
-      - redisnet
       - db_network
     links:
-      - redis
       - database:database
-
-  websockets:
-    restart: on-failure
-    build: .
-    command: daphne project.asgi:channel_layer --port 8003 -b 0.0.0.0
-    volumes:
-      - .:/app
-    depends_on:
-      - database
-    networks:
-      - webnet
-      - redisnet
-      - db_network
-    links:
-      - redis
-      - database:database
-
-  redis:
-    image: redis:latest
-    restart: always
-    volumes:
-      - redisdata:/data
-    networks:
-      - redisnet
-    command: redis-server
 
   database:
     image: kartoza/postgis:12.0
     volumes:
-      - postgres_data:/var/lib/postgresql/data/
+      - ./docker/postgres:/var/lib/postgresql/12/main
       - dbbackups:/backups
     env_file: .env
     expose:
@@ -67,6 +37,7 @@ services:
     restart: on-failure
     networks:
       - db_network
+
   nginx:
     image: nginx:1.15.0
     depends_on:
@@ -80,30 +51,3 @@ services:
     ports:
       - '4000:80'
 
-  worker:
-    build: .
-    volumes:
-      - .:/app
-    env_file: .env
-    restart: on-failure
-    command: celery -A project worker --concurrency=10 -l info
-    links:
-      - redis
-      - database
-    networks:
-      - redisnet
-      - db_network
-
-  beat:
-    build: .
-    volumes:
-      - .:/app
-    env_file: .env
-    restart: on-failure
-    command: celery -A project beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler --pidfile=/home/app/celery.pid
-    links:
-      - redis
-      - database
-    networks:
-      - redisnet
-      - db_network
